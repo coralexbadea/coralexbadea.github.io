@@ -1,14 +1,367 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <!--   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8989657289731230" crossorigin="anonymous"></script> -->
-  <meta charset="utf-8">
-  <title>WriteCode</title>
-  <base href="/">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <title>Coin Flip Game</title>
+    <script src="https://xumm.app/assets/cdn/xumm.min.js"></script>
+    <script src="https://unpkg.com/xrpl@2.3.0/build/xrpl-latest-min.js"></script>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background-color: #f4f4f4;
+        margin: 0;
+      }
+
+      .game-container {
+        background-color: #fff;
+        padding: 40px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .coin-container {
+        position: relative;
+        width: 200px;
+        height: 200px;
+        margin-bottom: 40px;
+        perspective: 400px;
+        cursor: pointer;
+        transition: transform 0.3s ease; /* Smooth transition for pulse */
+      }
+
+      .coin-container.pulsate {
+        animation: pulse 1s infinite alternate;
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        100% {
+          transform: scale(1.05);
+        }
+      }
+
+      .coin {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        transform-style: preserve-3d;
+        transition: transform 0.6s ease-in-out;
+      }
+
+      .front, .back {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        backface-visibility: hidden;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 4em;
+        color: #333;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+      }
+
+      .front {
+        background-color: #ffc107; /* Gold color */
+        transform: rotateY(0deg);
+      }
+
+      .back {
+        background-color: #ffc107; /* Silver color */
+        transform: rotateY(180deg);
+      }
+
+      .choose-container {
+        display: flex;
+        gap: 15px;
+        margin-top: 30px;
+      }
+
+      .choose-button {
+        padding: 15px 30px;
+        font-size: 1.2em;
+        cursor: pointer;
+        border: none;
+        border-radius: 10px;
+        color: white;
+        transition: background-color 0.3s ease;
+        background-color: #6c757d; /* Default gray */
+      }
+
+      .choose-button.selected {
+        background-color: #007bff; /* Blue when selected */
+      }
+
+      .choose-button:hover {
+        opacity: 0.9;
+      }
+
+      #result {
+        margin-top: 30px;
+        font-size: 1.4em;
+        font-weight: bold;
+        color: #28a745; /* Green for win */
+        white-space: pre-line; /* Preserve line breaks for logs */
+      }
+
+      .lose {
+        color: #dc3545 !important; /* Red for lose */
+      }
+
+      h2 {
+        margin-bottom: 30px;
+        color: #343a40;
+      }
+
+      #payload-log {
+        margin-top: 20px;
+        font-size: 0.9em;
+        color: #555;
+        white-space: pre-wrap;
+        word-break: break-word;
+        text-align: left;
+        background-color: #f9f9f9;
+        padding: 10px;
+        border-radius: 5px;
+      }
+    </style>
 </head>
 <body>
-  <app-root></app-root>
+
+  <div class="game-container">
+    <h2>Coin Flip Challenge</h2>
+
+    <div class="coin-container" onclick="flipCoin()">
+      <div id="coin" class="coin">
+        <div class="front">H</div>
+        <div class="back">T</div>
+      </div>
+    </div>
+
+    <div id="result">Choose Heads or Tails below!</div>
+
+    <div class="choose-container">
+      <button id="headsBtn" class="choose-button choose-heads" onclick="choose('heads')">Choose Heads</button>
+      <button id="tailsBtn" class="choose-button choose-tails" onclick="choose('tails')">Choose Tails</button>
+    </div>
+
+    <pre id="payload-log"></pre>
+  </div>
+
+  <script>
+    const coinContainer = document.querySelector('.coin-container');
+    const coin = document.getElementById('coin');
+    const resultDisplay = document.getElementById('result');
+    const headsBtn = document.getElementById('headsBtn');
+    const tailsBtn = document.getElementById('tailsBtn');
+    const payloadLog = document.getElementById('payload-log');
+    let userChoice = null;
+    let isFlipping = false;
+    const destinationAddress = 'rBy9Mznfoi7JEx4d7d3WkfDL77Hf9zWRUu';
+    const amountToSend = '1000000'; // 1 XAH in drops
+    const xumm = new Xumm('7a10d5c2-2c3d-485f-861e-0a42232c33f1'); // Replace with your Xumm App UUID
+
+    function logMessage(message) {
+      payloadLog.textContent += message + '\n';
+    }
+
+    function choose(choice) {
+      if (!isFlipping) {
+        userChoice = choice;
+        headsBtn.classList.remove('selected');
+        tailsBtn.classList.remove('selected');
+        if (choice === 'heads') {
+          headsBtn.classList.add('selected');
+        } else {
+          tailsBtn.classList.add('selected');
+        }
+        coinContainer.classList.add('pulsate');
+        resultDisplay.textContent = 'Click the coin to flip!';
+        resultDisplay.className = '';
+        logMessage('User chose: ' + choice);
+      } else {
+        resultDisplay.textContent = "Wait for the current flip to finish!";
+      }
+    }
+
+  async function flipCoin() {
+  if (!userChoice) {
+    resultDisplay.textContent = "Please choose Heads or Tails first!";
+    return;
+  }
+
+  if (isFlipping) {
+    return;
+  }
+
+  isFlipping = true;
+  headsBtn.disabled = true;
+  tailsBtn.disabled = true;
+
+  
+  coinContainer.classList.remove('pulsate');
+
+  resultDisplay.textContent = 'Processing 1 XAH payment via Xumm...';
+  resultDisplay.className = '';
+  logMessage('Creating 1 XAH payment payload...');
+
+  try {
+    const payload = await xumm.payload.create({
+      txjson: {
+        TransactionType: "Payment",
+        Destination: destinationAddress,
+        Amount: amountToSend
+      },
+      custom_meta: {
+        identifier: "coin-flip-entry-fee",
+        instruction: "Please sign to pay 1 XAH entry fee for the coin flip."
+      }
+    });
+
+    logMessage('Payload created:\n' + JSON.stringify(payload, null, 2));
+    logMessage('Opening Xumm sign request...');
+    xumm.xapp.openSignRequest(payload);
+
+    // Get current balance
+    const client = new xrpl.Client("wss://xahau.network")
+    await client.connect()
+    let info = await client.request({
+      command: "account_info",
+      account: "rBfbEVSWrDNGer3Xr5Y4bVNgq5RxxhHeZq"
+    })
+    logMessage("✅Account info:\n" + JSON.stringify(info, null, 2));
+    // Get the last balance before payment
+    let lastBalance = info.result.account_data["Balance"]
+    logMessage("log1:\n" + JSON.stringify(info.result, null, 2));
+    logMessage("log1:\n" + JSON.stringify(info.result.account_data, null, 2));
+    logMessage("log1:\n" + JSON.stringify(info.result.account_data.Balance, null, 2));
+    logMessage("✅Last Balance:" + lastBalance)
+    logMessage("✅Last Balance:" + parseInt(lastBalance))
+
+    // Poll every 2 seconds until signed, rejected, or expired
+    let status = null;
+    let response = null;
+    while (true) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      response = await xumm.payload.get(payload.uuid);
+      logMessage('Polling payload status:\n' + JSON.stringify(response, null, 2));
+
+      if (response.meta.signed) {
+        logMessage('✅ Payment SIGNED by user.');
+        status = 'signed';
+        break;
+      } else if (response.meta.cancelled) {
+        logMessage('❌ Payment REJECTED by user.');
+        status = 'rejected';
+        break;
+      } else if (response.meta.expired) {
+        logMessage('⌛ Payment EXPIRED.');
+        status = 'expired';
+        break;
+      }
+    }
+
+    if (status !== 'signed') {
+      resultDisplay.textContent = 'Payment not completed. Coin flip canceled.';
+      isFlipping = false;
+      headsBtn.disabled = false;
+      tailsBtn.disabled = false;
+      return;
+    }
+
+    // Proceed to flip the coin
+    coin.style.animation = 'none';
+    void coin.offsetWidth;
+    let flipDuration = 30; // total seconds
+    let numberOfFlips = 10;
+
+    coin.style.animation = `flip 0.6s linear ${numberOfFlips} forwards`;
+
+    await new Promise(resolve => setTimeout(resolve, 10000));
+    if(status === 'signed') {
+      // check if lose or win
+      info = await client.request({
+      command: "account_info",
+      account: "rBfbEVSWrDNGer3Xr5Y4bVNgq5RxxhHeZq"
+      })
+      let currentBalance = info.result.account_data["Balance"] // Get current Balance
+      logMessage("✅log2:\n" + JSON.stringify(info.result, null, 2));
+      logMessage("✅log2:\n" + JSON.stringify(info.result.account_data, null, 2));
+      logMessage("✅log2:\n" + JSON.stringify(info.result.account_data.Balance, null, 2));
+      logMessage("✅ Balance after payment:"+ parseInt(currentBalance))
+      if(parseInt(currentBalance) > parseInt(lastBalance)) {
+        logMessage("By balance YOU WIN!")
+        outcome = userChoice === 'heads' ? 'heads' : 'tails'; // Keep the outcome
+      }
+      else {
+        logMessage("By balance YOU LOSE!")
+        outcome = userChoice === 'heads' ? 'tails' : 'heads'; // Flip the outcome
+      }
+    }
+    client.disconnect();
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+
+    coin.className = `coin ${outcome}`;
+
+    const frontFace = coin.querySelector('.front');
+    const backFace = coin.querySelector('.back');
+    frontFace.textContent = outcome === 'heads' ? 'H' : 'T';
+    backFace.textContent = outcome === 'heads' ? 'T' : 'H';
+
+    if (outcome === userChoice) {
+      resultDisplay.textContent = 'You WIN!';
+      resultDisplay.classList.add('win');
+      logMessage('Result: WIN');
+    } else {
+      resultDisplay.textContent = 'You LOSE!';
+      resultDisplay.classList.add('lose');
+      logMessage('Result: LOSE');
+    }
+    coin.style.animation = '';
+
+    resultDisplay.textContent += "\nChoose Heads or Tails below for the next round!";
+  } catch (error) {
+    console.error("Error during payment or flip:", error);
+    resultDisplay.textContent = "Error occurred. Check logs or try again.";
+    logMessage("Error: " + error.message);
+  }
+
+  userChoice = null;
+  isFlipping = false;
+  headsBtn.classList.remove('selected');
+  tailsBtn.classList.remove('selected');
+  headsBtn.disabled = false;
+  tailsBtn.disabled = false;
+  coinContainer.classList.remove('pulsate');
+}
+
+    let styleSheet = document.createElement("style");
+    styleSheet.type = "text/css";
+    styleSheet.innerText = `@keyframes flip {
+      0% {
+        transform: rotateY(0deg);
+      }
+      50% {
+        transform: rotateY(180deg);
+      }
+      100% {
+        transform: rotateY(360deg);
+      }
+    }`;
+    document.head.appendChild(styleSheet);
+  </script>
+
 </body>
 </html>
